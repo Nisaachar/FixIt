@@ -23,7 +23,10 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "CAMERA"
+      ],
+      "package": "com.nisaachar.FixIt"
     },
     "web": {
       "bundler": "metro",
@@ -32,10 +35,17 @@
     },
     "plugins": [
       "expo-router"
-      
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "9b68f6f6-cfdb-4a4d-ae4c-16f5225a9c1c"
+      }
     }
   }
 }

@@ -3,23 +3,36 @@ import React, { useState, useRef } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View, Image, Dimensions } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import AWS from 'aws-sdk';
+import * as base64 from 'base64-js';
+import credentials from '../../aws-credentials.json';
+
+
 
 export default function CameraScreen() {
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedImage, setCapturedImage] = useState(null);
   const cameraRef = useRef(null);
+  const awsAccessKeyId = credentials.AWS_ACCESS_KEY_ID;
+  const awsSecretAccessKey = credentials.AWS_SECRET_ACCESS_KEY;
+  
 
   const screenWidth = Dimensions.get('window').width;
   const cameraHeight = (screenWidth * 4) / 3; // Calculate height for 4:3 ratio
 
+  // Configure AWS S3
+  const s3 = new AWS.S3({
+    accessKeyId: awsAccessKeyId,
+    secretAccessKey: awsSecretAccessKey,
+    region: 'us-east-2',
+  });
+
   if (!permission) {
-    // Camera permissions are still loading.
     return <View />;
   }
 
   if (!permission.granted) {
-    // Camera permissions are not granted yet.
     return (
       <View style={styles.container}>
         <Text style={styles.message}>We need your permission to show the camera</Text>
@@ -32,16 +45,35 @@ export default function CameraScreen() {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   }
 
+  const uploadToS3 = async (fileUri) => {
+    try {
+      const file = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+      const byteArray = base64.toByteArray(file);
+      const fileName = `photo_${Date.now()}.jpg`;
+  
+      const params = {
+        Bucket: 'fixit-nish',
+        Key: fileName,
+        Body: byteArray,
+        ContentType: 'image/jpeg',
+      };
+  
+      const data = await s3.upload(params).promise();
+      console.log('Successfully uploaded to S3:', data.Location);
+    } catch (error) {
+      console.error('Error uploading to S3:', error);
+    }
+  };
+
   const takePicture = async () => {
     if (cameraRef.current) {
       try {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 1, // Full quality
-          exif: true, // Capture EXIF data, can be used to check image dimensions
+          quality: 1,
+          exif: true,
         });
         console.log('Photo captured:', photo.uri);
 
-        // Save the photo to the filesystem
         const photoUri = `${FileSystem.documentDirectory}photo.jpg`;
         await FileSystem.moveAsync({
           from: photo.uri,
@@ -50,6 +82,9 @@ export default function CameraScreen() {
 
         console.log('Photo saved to:', photoUri);
         setCapturedImage(photoUri); // Set the captured image URI to state
+
+        // Upload to S3
+        await uploadToS3(photoUri);
 
       } catch (error) {
         console.error('Error taking picture:', error);
@@ -61,7 +96,7 @@ export default function CameraScreen() {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      aspect: [4, 3], // Enforce 4:3 aspect ratio in picker as well
+      aspect: [4, 3],
       quality: 1,
     });
 
@@ -73,7 +108,7 @@ export default function CameraScreen() {
   return (
     <View style={styles.container}>
       <CameraView
-        style={{ ...styles.camera, height: cameraHeight }} // Set the camera view to 4:3 aspect ratio
+        style={{ ...styles.camera, height: cameraHeight }}
         facing={facing}
         ref={cameraRef}
       >
